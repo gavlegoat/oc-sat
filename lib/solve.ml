@@ -15,7 +15,7 @@ type sat_state = {
 let substitute (f : formula) (l : literal) (value : bool) : formula =
   let subst (cl : clause) (l : literal) (value : bool) : clause =
     if clause_contains (if value then l else neg l) cl
-    then clause_of_literal_list [lit_of_int 0]
+    then satisfied_clause
     else eliminate_literal l cl in
   let form = formula_map (fun c -> subst c l value) f in
   strip_satisfied_clauses form

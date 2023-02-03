@@ -17,6 +17,7 @@ let is_negated (lit : literal) : bool = (int_of_lit lit) < 0
 let print_literal (lit : literal) : unit =
   print_int lit
 
+(* This module provides a comparison for literal maps and sets. *)
 module Literal = struct
   type t = literal
   let compare = compare
@@ -38,13 +39,14 @@ let remove_variable (l : literal) (vs : varset) : varset =
 let varset_find_first (pred : literal -> bool) (vs : varset) : literal option =
   LSet.find_first_opt pred vs
 
-(* A clause is a list of literals, implicitly joined by disjunction. *)
 type clause = {
   literals : literal list;
 }
 
 let clause_of_literal_list (lits : literal list) : clause =
-  { literals = lits }
+  clause_remove_duplicates { literals = lits }
+
+let satisfied_clause : clause = { literals = [lit_of_int 0] }
 
 let clause_contains (v : literal) (cl : clause) : bool =
   List.exists (fun l -> l = v) cl.literals
@@ -70,6 +72,9 @@ let clause_remove_duplicates (cl : clause) : clause =
 let clause_empty (cl : clause) : bool =
   cl.literals = []
 
+let eliminate_literal (v : literal) (cl : clause) : clause =
+  { literals = List.filter (fun l -> v <> l && v <> neg l) cl.literals }
+
 let get_unit_literal (cl : clause) : literal option =
   match cl.literals with
   | [] -> Option.none
@@ -80,9 +85,6 @@ let clause_satisfied (cl : clause) : bool =
   match cl.literals with
   | [] -> false
   | h :: _ -> int_of_lit h = 0
-
-let eliminate_literal (v : literal) (cl : clause) : clause =
-  { literals = List.filter (fun l -> v <> l && v <> neg l) cl.literals }
 
 let collect_clause_literals (cl : clause) : varset =
   LSet.of_list (List.map base_literal cl.literals)
