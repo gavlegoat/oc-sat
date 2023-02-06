@@ -43,6 +43,17 @@ type clause = {
   literals : literal list;
 }
 
+let clause_remove_duplicates (cl : clause) : clause =
+  let rec process_literals (lits : literal list)
+                           (acc : literal list) : literal list =
+    match lits with
+    | [] -> List.rev acc
+    | h :: t ->
+        if List.exists (fun x -> x = neg h) t
+        then [lit_of_int 0]
+        else process_literals (List.filter (fun x -> x <> h) t) (h :: acc) in
+  { literals = process_literals cl.literals [] }
+
 let clause_of_literal_list (lits : literal list) : clause =
   clause_remove_duplicates { literals = lits }
 
@@ -57,17 +68,6 @@ let clause_sign (l : literal) (cl : clause) : bool option =
                                    | None -> Option.some (not (is_negated v))
                                    | acc -> acc
                               else a) cl.literals Option.none
-
-let clause_remove_duplicates (cl : clause) : clause =
-  let rec process_literals (lits : literal list)
-                           (acc : literal list) : literal list =
-    match lits with
-    | [] -> List.rev acc
-    | h :: t ->
-        if List.exists (fun x -> x = neg h) t
-        then [lit_of_int 0]
-        else process_literals (List.filter (fun x -> x <> h) t) (h :: acc) in
-  { literals = process_literals cl.literals [] }
 
 let clause_empty (cl : clause) : bool =
   cl.literals = []
@@ -97,35 +97,39 @@ let print_clause (cl : clause) : unit =
     | h :: t -> print_literal h ; print_string " | " ; print_lits t in
   print_lits cl.literals
 
+module IMap = Map.Make(Int)
+
 (* A formula is a list of clauses, implicitly joined by conjunction. *)
 type formula = {
-  clauses : clause list;
+  clauses : clause IMap.t;
 }
 
 let formula_of_clause_list (cls : clause list) : formula =
-  { clauses = cls }
+  let rec enumerate acc i lst = match lst with
+  | [] -> List.rev acc
+  | h :: t -> enumerate ((i, h) :: acc) (i + 1) t in
+  { clauses = IMap.of_seq (List.to_seq (enumerate [] 0 cls)) }
 
 let formula_map (f : clause -> clause) (form : formula) : formula =
-  { clauses = List.map f form.clauses }
+  { clauses = IMap.map f form.clauses }
 
 let strip_satisfied_clauses (form : formula) : formula =
-  { clauses = List.fold_right
-                (fun c a -> if clause_satisfied c
-                            then a
-                            else c :: a) form.clauses [] }
+  { clauses = IMap.filter (fun _ c -> not (clause_satisfied c)) form.clauses }
 
 let formula_satisfied (form : formula) : bool =
-  form.clauses = []
+  form.clauses = IMap.empty
 
 let formula_unsatisfiable (form : formula) : bool =
-  List.exists clause_empty form.clauses
+  IMap.exists (fun _ c -> clause_empty c) form.clauses
 
-let get_clauses (f : formula) : clause list = f.clauses
+let get_clauses (f : formula) : clause list =
+  let (_, cls) = List.split (List.of_seq (IMap.to_seq f.clauses)) in
+  cls
 
 let collect_formula_literals (form : formula) : varset =
-  List.fold_right LSet.union
-                  (List.map collect_clause_literals form.clauses)
-                  LSet.empty
+  IMap.fold (fun _ s1 s2 -> LSet.union s1 s2)
+            (IMap.map collect_clause_literals form.clauses)
+            LSet.empty
 
 let remove_duplicates_within_clauses (f : formula) : formula =
   strip_satisfied_clauses (formula_map clause_remove_duplicates f)
@@ -141,7 +145,7 @@ let print_formula (form : formula) : unit =
         print_string ")" ;
         print_string " & " ;
         print_clauses t in
-  print_clauses form.clauses
+  print_clauses (get_clauses form)
 
 module LMap = Map.Make(Literal)
 
