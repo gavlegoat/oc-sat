@@ -1,0 +1,3 @@
+(library
+  (name cdcl)
+  (libraries core str ocamlgraph))
