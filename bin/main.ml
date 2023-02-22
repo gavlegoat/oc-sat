@@ -1,6 +1,5 @@
-open Sat.Types
-open Sat.Parse
-open Sat.Solve
+open Sat.DPLL.Types
+open Sat.DPLL.Solve
 
 let form = parse_formula "test.cnf"
 let config = { unit_prop = true;
