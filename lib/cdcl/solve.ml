@@ -119,20 +119,35 @@ let rec propagate_units (asgns : (literal * bool) list)
   match asgns with
   | [] -> st
   | (var, value) :: t ->
-      let st1 =
-        { st with
-          variables = remove_variable var;
-          interpretation = add_interpretation var value st.interpretation;
-        } in
-      match LMap.find_opt var st1.watch_lits with
-      | None -> propagate_units t st1
+      let lit = if value then var else neg var in
+      match LMap.find_opt lit st.watch_lits with
+      | None -> propagate_units t st
       | Some cis ->
           let process_clause ci s : ((literal * bool) option, sat_state) =
-            match choose_watch_literals (get_clause ci st1.formula)
-                                        st.interpretation with
-            | [] -> (None, { st1 with conflict = true; }) (* conflict *)
-            | [l] -> failwith "undefined"  (* unit clause *)
-            | ls -> failwith "undefined"  (* assign new watch lits *)
+            match choose_watch_literals (get_clause ci s.formula)
+                                        s.interpretation with
+            | [] -> (None, { s with conflict = true; }) (* conflict *)
+            | [l] ->  (* unit clause *)
+                let v = base_literal l in
+                let vl = not (is_negated l) in
+                let st1 =
+                  { s with
+                    variables = remove_variable v s.varset;
+                    interpretation =
+                      add_interpretation v vl s.interpretation;
+                  } in
+                (Some (var, value), st1)
+            | [l1, l2] ->  (* assign new watch lits *)
+                let update_fun cs = match cs with
+                | None -> Some (LSet.singleton ci)
+                | Some c -> Some (LSet.add ci c) in
+                let st1 =
+                  { s with
+                    watch_lits = LMap.update l2 update_fun
+                                   (LMap.update l1 update_fun s.watch_lits);
+                  } in
+                (None, st1)
+            | _ -> failwith "Bad result from choose_watch_literals"
           in
           let (nasgns, st2) =
             LSet.fold (fun c acc -> match process_clause c with
